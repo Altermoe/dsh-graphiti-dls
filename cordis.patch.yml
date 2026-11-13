@@ -1,7 +1,9 @@
 # dsh-graphiti-dls bundle patch.
 #
-# 作为 profile bundle 安装时，插入记忆插件 Host 行：
-#  - dls-memory：ctx.dlsMemory 服务 + agent/pre-step consumer
+# 作为 profile bundle 安装时，插入两个 Host 行：
+#  - dls-memory：真实记忆插件（ctx.dlsMemory 服务 + agent/pre-step consumer）
+#  - dls-live-eval：实例内评测驱动，激活后把对比/消融结果写回
+#    eval/results/dsh-live/；跑完应在 profile 层把该行禁用。
 #
 # 记忆插件默认启用显式提取器（只接受 `[dls] {...}` 标记行），身份取
 # profile config 的应用侧声明，不解析对话文本里的自称。
@@ -14,3 +16,9 @@
           user_id: local-user
           project_id: dsh-graphiti-dls
         extractExplicit: true
+
+    - id: dls-live-eval
+      name: 'dsh-graphiti-dls/dls-eval'
+      inject: [dlsMemory]
+      config:
+        run: true

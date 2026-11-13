@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./dls-memory": "./src/dsh/index.ts",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./dls-eval": "./src/eval/host-plugin.ts"
   },
   "description": "DeepSeek Harness 长期记忆与上下文编译插件：时态知识图谱 + 受控写入 + 有预算的上下文",
   "packageManager": "pnpm@11.22.0",

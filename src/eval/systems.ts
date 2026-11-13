@@ -368,12 +368,18 @@ export class DlsSystem implements MemorySystemUnderTest {
     readonly id: string,
     readonly label: string,
     private readonly config: DlsConfig = cloneConfig(),
+    /**
+     * 被测系统的构造入口。默认直接 new DlsMemorySystem；实例内评测传入
+     * 插件服务工厂，使被测对象与真实插件同源。
+     */
+    private readonly createSystem: (config: DlsConfig) => DlsMemorySystem = (item) =>
+      new DlsMemorySystem(item),
   ) {
-    this.system = new DlsMemorySystem(config);
+    this.system = this.createSystem(config);
   }
 
   reset(): void {
-    this.system = new DlsMemorySystem(this.config);
+    this.system = this.createSystem(this.config);
   }
 
   ingest(event: EpisodeEvent, scope: FactScope): void {
@@ -469,7 +475,22 @@ function marketNotes(): Record<string, string> {
   }
 }
 
-export function buildCompareSystems(): MemorySystemUnderTest[] {
+/**
+ * 构造一个 DLS 被测系统的工厂：实例内评测传入插件服务工厂，
+ * 默认走进程内 `DlsMemorySystem`。
+ */
+export type DlsSystemFactory = (
+  id: string,
+  label: string,
+  config: DlsConfig,
+) => MemorySystemUnderTest;
+
+const defaultDlsFactory: DlsSystemFactory = (id, label, config) =>
+  new DlsSystem(id, label, config);
+
+export function buildCompareSystems(
+  dlsFactory: DlsSystemFactory = defaultDlsFactory,
+): MemorySystemUnderTest[] {
   const notes = marketNotes();
   const market: MemorySystemUnderTest[] = [
     new FishSoulSystem(),
@@ -487,7 +508,11 @@ export function buildCompareSystems(): MemorySystemUnderTest[] {
     new VectorRagSystem(),
     new NativeGraphitiSystem(),
     ...market,
-    new DlsSystem('dls:full', 'DLS 全量（Graphiti + 写入策略 + 上下文编译）'),
+    dlsFactory(
+      'dls:full',
+      'DLS 全量（Graphiti + 写入策略 + 上下文编译）',
+      cloneConfig(),
+    ),
   ];
 }
 
@@ -502,15 +527,17 @@ export const ABLATION_COMPONENTS: Array<{ key: keyof AblationFlags; label: strin
   { key: 'audit', label: '关闭审计与纠错（删除/撤销）' },
 ];
 
-export function buildAblationSystems(): MemorySystemUnderTest[] {
+export function buildAblationSystems(
+  dlsFactory: DlsSystemFactory = defaultDlsFactory,
+): MemorySystemUnderTest[] {
   const systems: MemorySystemUnderTest[] = [
-    new DlsSystem('dls:full', 'DLS 全量'),
+    dlsFactory('dls:full', 'DLS 全量', cloneConfig()),
   ];
   for (const component of ABLATION_COMPONENTS) {
     const config = cloneConfig();
     config.ablation[component.key] = false;
     systems.push(
-      new DlsSystem(`dls:no_${component.key}`, `消融 — ${component.label}`, config),
+      dlsFactory(`dls:no_${component.key}`, `消融 — ${component.label}`, config),
     );
   }
   // 组合消融：单层关闭常被其他防御层补偿（防御纵深），这里给出联合效应。
@@ -519,7 +546,7 @@ export function buildAblationSystems(): MemorySystemUnderTest[] {
   combined.ablation.scope_isolation = false;
   combined.ablation.source_ranking = false;
   systems.push(
-    new DlsSystem(
+    dlsFactory(
       'dls:no_defense_in_depth',
       '消融组合 — 关闭写入策略 + 隔离 + 来源降权',
       combined,
