@@ -1,1 +1,20 @@
+# 依赖与构建
+node_modules/
+*.tsbuildinfo
+dist/
+.dsh-build/
+
+# 本机环境
+.env
+.env.*
+!.env.example
+*.log
+
+# 评测中间产物（原始结果与报告需要提交，作为一等产物）
+/tmp/
+# dump-config 含用户本机 profile 全量配置（含凭据引用与内嵌资源），只作本地验证证据
+eval/results/dsh-dump-config.txt
+.DS_Store
+
+# 工具侧规则（本地副本，不维护规范）
 .trae/

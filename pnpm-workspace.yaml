@@ -1,0 +1,6 @@
+# pnpm 11+ 的依赖构建脚本授权放在 workspace 设置里（package.json 的 pnpm 字段已废弃）
+packages:
+  - .
+
+allowBuilds:
+  esbuild: true

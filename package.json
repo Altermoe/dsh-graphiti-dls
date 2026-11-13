@@ -1,0 +1,30 @@
+{
+  "name": "dsh-graphiti-dls",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./dls-memory": "./src/dsh/index.ts",
+    "./package.json": "./package.json"
+  },
+  "description": "DeepSeek Harness 长期记忆与上下文编译插件：时态知识图谱 + 受控写入 + 有预算的上下文",
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "eval:compare": "tsx src/eval/cli.ts compare",
+    "eval:ablation": "tsx src/eval/cli.ts ablation",
+    "eval:all": "tsx src/eval/cli.ts all",
+    "market:catalog": "python3 scripts/market_catalog.py --catalog /tmp/dsh-catalog.json --downloads --select \"dsh-fish-soul,dsh-aiyayi,dsh-cross-memory,@dsh-agentic-roleplay/state\"",
+    "dsh:integration": "bash scripts/dsh-integration.sh"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
