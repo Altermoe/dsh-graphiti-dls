@@ -25,7 +25,7 @@ class MockContext {
   [key: string]: unknown;
 
   inject(deps: string[], callback: (ctx: DshContext) => void) {
-    assert.deepEqual(deps, ['agent']);
+    assert.deepEqual(deps, ['agents']);
     callback(this as unknown as DshContext);
     return { dispose: () => this.disposals.push('inject') };
   }
@@ -63,7 +63,7 @@ const CANDIDATE_LINE =
 test('插件声明 inject 依赖并提供 ctx.dlsMemory 服务', () => {
   const ctx = new MockContext();
   const plugin = createDlsPlugin();
-  assert.deepEqual(plugin.inject, ['agent']);
+  assert.deepEqual(plugin.inject, ['agents']);
   plugin.apply(ctx as unknown as DshContext);
   assert.ok(ctx.dlsMemory instanceof DlsMemoryService);
   assert.ok(ctx.listeners.has('agent/pre-step'));

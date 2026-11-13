@@ -19,7 +19,7 @@
  *    对话文本里自称的身份。
  *
  * ── 依赖与生命周期 ────────────────────────────────────────────────
- *  - `ctx.inject(['agent'], ...)` 声明依赖；扩展包依赖 `dsh-agent` 的事件
+ *  - `ctx.inject(['agents'], ...)` 声明依赖；扩展包依赖 `dsh-agent` 的事件
  *    与服务，**不依赖 `dsh-agent-loop`**（后者是唯一的具体循环插件）。
  *  - 注册是可逆副作用：`ctx.inject` 回调里的服务与监听器随插件卸载自动
  *    撤销，不写「手动清理注册表」这种反模式。
@@ -28,6 +28,8 @@
  * 描述所需能力（duck typing）。docs/implementation.md 给出替换为 dsh
  * 真实 `Service` / `Context` 类型后的等价写法。
  */
+
+import { randomUUID } from 'node:crypto';
 
 import type {
   CandidateFact,
@@ -53,13 +55,20 @@ export interface UserMessageLite {
   source?: { kind?: string; [key: string]: unknown };
 }
 
-/** 注入消息的 source.kind 必须在 MessageSourceMap 中声明。 */
+/**
+ * 注入消息必须是完整 UserMessage：Session 事件校验要求非空 id、
+ * role: 'user' 与数组 content；source.kind 必须在 MessageSourceMap 中声明。
+ */
 export interface DlsInjectedMessage {
+  id: string;
+  role: 'user';
   content: TextContent[];
   source: { kind: 'dls-memory'; turn: number; [key: string]: unknown };
 }
 
 export interface DshAgent {
+  /** 真实 dsh 的 Agent 身份即 SessionId；用于派生 session 作用域。 */
+  id?: string;
   inject(message: DlsInjectedMessage): void;
 }
 
@@ -84,6 +93,8 @@ export interface Disposable {
 
 export interface DshContext {
   inject(deps: string[], callback: (ctx: DshContext) => void): Disposable;
+  /** Cordis 服务注册；归属当前 fiber，卸载时自动撤销。 */
+  provide(name: string, value: unknown): () => void;
   on(
     event: 'agent/pre-step',
     listener: (
@@ -151,6 +162,16 @@ function messageText(messages: UserMessageLite[]): string {
     .join('\n');
 }
 
+/** 构造完整 UserMessage 形状的注入消息（Session 校验要求 id/role/content/source）。 */
+export function createInjectedMessage(text: string, turn: number): DlsInjectedMessage {
+  return {
+    id: randomUUID(),
+    role: 'user',
+    content: [{ type: 'text', text }],
+    source: { kind: 'dls-memory', turn },
+  };
+}
+
 /**
  * 创建插件。真实 Cordis 写法：
  *
@@ -159,7 +180,7 @@ function messageText(messages: UserMessageLite[]): string {
  *   constructor(ctx: Context, config: DlsConfig) { super(ctx, 'dlsMemory', true) }
  * }
  * export default class DlsPlugin {
- *   static inject = ['agent']
+ *   static inject = ['agents']
  *   constructor(private ctx: Context, private config: DlsConfig) {}
  *   apply(ctx: Context) { /* ctx.on('agent/pre-step', ...) *\/ }
  * }
@@ -171,9 +192,9 @@ export function createDlsPlugin(options: DlsPluginOptions = {}): DlsPlugin {
   return {
     name: 'dls-memory',
     // 依赖 dsh-agent 的事件与服务，不依赖 dsh-agent-loop。
-    inject: ['agent'],
+    inject: ['agents'],
     apply(ctx: DshContext): void {
-      ctx.inject(['agent'], (childCtx: DshContext) => {
+      ctx.inject(['agents'], (childCtx: DshContext) => {
         // Service Definition 的 ctx 键；真实实现由 Service 构造函数完成。
         childCtx.dlsMemory = service;
 
@@ -201,15 +222,10 @@ export function createDlsPlugin(options: DlsPluginOptions = {}): DlsPlugin {
             });
 
             if (compiled.memory_text) {
-              const message: DlsInjectedMessage = {
-                content: [
-                  {
-                    type: 'text',
-                    text: `<dls-memory>\n${compiled.memory_text}\n</dls-memory>`,
-                  },
-                ],
-                source: { kind: 'dls-memory', turn: payload.turn },
-              };
+              const message = createInjectedMessage(
+                `<dls-memory>\n${compiled.memory_text}\n</dls-memory>`,
+                payload.turn,
+              );
               // 模型可见输入由 dsh 自动记录，不另加 SessionEvent。
               payload.agent.inject(message);
               options.onInjected?.(message, compiled);
