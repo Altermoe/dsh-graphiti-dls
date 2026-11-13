@@ -1,0 +1,18 @@
+# 本地 dsh 集成验证用的 loader patch 层。
+#
+# 用法（在 deepseek-harness 仓库内）：
+#   pnpm dsh --profile web --patch <this-file> --dump-config
+#
+# `insert` 才是新增条目；`- id:` 只覆盖已有行（见 bundles/base/cordis.patch.yml）。
+# `--dump-config` 只做 profile 组合树合成与打印，不加载插件代码、不启动需要
+# 模型凭据的 app，因此适合在 CI / 评测中做接入契约检查。
+# 真实安装用：dsh plugin --profile web add <package>（需先发布或 link 本仓库）。
+- insert:
+    - id: dls-memory
+      name: "dsh-graphiti-dls/dls-memory"
+      inject: [agent]
+      config:
+        maxInputTokens: 6000
+        memoryBudgetTokens: 1800
+        recentTurns: 8
+        requireProvenance: true
