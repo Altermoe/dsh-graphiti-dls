@@ -5,6 +5,9 @@
 
 `dsh-graphiti-dls`（Digital Life System）为长期在线 Agent 提供记忆架构：将值得保留的信息转化为带有来源、作用域和时间信息的结构化事实，根据当前任务选择必要状态，编译为模型可用的上下文。
 
+> **实施状态（2026-11-13）**：P0 最小闭环已落地为可运行工程，对比实验与消融实验已跑通。
+> 见 [实施说明](docs/implementation.md) 与 [实验报告](docs/experiment-report.md)；复现命令见文末。
+
 项目计划复用 [Graphiti](https://github.com/getzep/graphiti) 作为时态知识图谱后端，通过独立适配层接入 `deepseek-harness`，定义适用于 Agent 的**记忆生命周期、可信写入策略和上下文编译规则**。
 
 ## 为什么需要 DLS？
@@ -245,14 +248,14 @@ DLS 的价值通过与原生 Graphiti 的对照实验验证：只有新增的上
 
 ### P0：建立可靠的最小闭环
 
-- [ ] 明确 DSH 插件接口与 Graphiti 服务之间的集成边界。
-- [ ] 定义 DLS 逻辑记忆模型、来源类型、信任级别和记忆生命周期。
-- [ ] 实现候选抽取、Schema 校验、关系白名单与受控写入。
-- [ ] 实现有作用域和时间语义的事实查询与状态更新。
-- [ ] 实现上下文编译器、Token 预算与近期对话窗口整合。
-- [ ] 提供基本的记忆查看、来源追溯、修正和删除能力。
-- [ ] 验证用户、会话和 Agent 之间的隔离。
-- [ ] 建立可复现基线，测量事实回忆、状态更新、注入测试、Token、延迟和总成本。
+- [x] 明确 DSH 插件接口与 Graphiti 服务之间的集成边界（`GraphitiPort` + 独立服务契约）。
+- [x] 定义 DLS 逻辑记忆模型、来源类型、信任级别和记忆生命周期。
+- [x] 实现候选抽取、Schema 校验、关系白名单与受控写入（抽取器为显式结构化提取，LLM 抽取待接）。
+- [x] 实现有作用域和时间语义的事实查询与状态更新。
+- [x] 实现上下文编译器、Token 预算与近期对话窗口整合。
+- [x] 提供基本的记忆查看、来源追溯、修正和删除能力。
+- [ ] 验证用户、会话和 Agent 之间的隔离（用户/项目/会话/场景已验证；Agent 私有与共享记忆属 P2）。
+- [x] 建立可复现基线，测量事实回忆、状态更新、注入测试、Token、延迟和总成本。
 
 ### P1：增强可运维性与纠错能力
 
@@ -288,6 +291,29 @@ Graphiti 是 Python 生态中的图谱框架，而 DSH 插件侧可能运行在 
 > **让长期状态可追溯、可纠错；让单轮上下文有预算、可解释；让记忆写入受到来源与权限策略约束。**
 
 项目成功与否以真实长期交互任务中的表现衡量：相对简化基线的准确性、安全性、可调试性，以及总成本和延迟。
+
+## 实施状态与复现
+
+本仓库已从设计文档升级为可运行工程（TypeScript / ESM，运行时零依赖）。
+
+| 产物 | 位置 |
+|---|---|
+| 记忆模型、受控写入、双时态后端 | `src/model/`、`src/policy/`、`src/store/` |
+| 检索器与上下文编译器 | `src/compiler/` |
+| DSH Cordis 插件适配层 | `src/dsh/` |
+| 评测集（60 case / 10 类场景） | `datasets/roleplay-memory.json` |
+| 对比与消融实验原始结果 | `eval/results/compare.{json,md}`、`eval/results/ablation.{json,md}` |
+| 实施说明 / 实验报告 | [docs/implementation.md](docs/implementation.md) / [docs/experiment-report.md](docs/experiment-report.md) |
+
+```bash
+pnpm install
+pnpm run typecheck
+pnpm run test
+pnpm run eval:all
+pnpm run dsh:integration
+```
+
+**实验结论摘要**：DLS 全量在 60 个角色扮演长期记忆 case 上取得 100% 事实回忆准确率、100% 状态更新与时态查询准确率，过期误用、错误写入、注入持久化与攻击成功率均为 0%；最佳对照（原生 Graphiti）回忆准确率 80%，但状态更新 0%、错误写入 100%。消融实验显示收益来自写入策略、双时态、作用域隔离、上下文编译与审计纠错的组合，且存在防御纵深（单层消融会被其他层补偿）。完整数据、评测边界与已知偏差见 [实验报告](docs/experiment-report.md)。
 
 ## 参考
 
