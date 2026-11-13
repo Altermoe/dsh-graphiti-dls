@@ -5,7 +5,8 @@
 
 `dsh-graphiti-dls`（Digital Life System）为长期在线 Agent 提供记忆架构：将值得保留的信息转化为带有来源、作用域和时间信息的结构化事实，根据当前任务选择必要状态，编译为模型可用的上下文。
 
-> **实施状态（2026-11-13）**：P0 最小闭环已落地为可运行工程，对比实验与消融实验已跑通。
+> **实施状态（2026-11-13）**：P0 最小闭环已落地为可运行工程，对比实验与消融实验已跑通；
+> 已作为 bundle 链接进本机 `web` profile，并在真实 dsh 宿主进程内复跑，结果与进程内直跑逐 case 一致。
 > 见 [实施说明](docs/implementation.md) 与 [实验报告](docs/experiment-report.md)；复现命令见文末。
 
 项目计划复用 [Graphiti](https://github.com/getzep/graphiti) 作为时态知识图谱后端，通过独立适配层接入 `deepseek-harness`，定义适用于 Agent 的**记忆生命周期、可信写入策略和上下文编译规则**。
@@ -303,6 +304,7 @@ Graphiti 是 Python 生态中的图谱框架，而 DSH 插件侧可能运行在 
 | DSH Cordis 插件适配层 | `src/dsh/` |
 | 评测集（60 case / 10 类场景） | `datasets/roleplay-memory.json` |
 | 对比与消融实验原始结果 | `eval/results/compare.{json,md}`、`eval/results/ablation.{json,md}` |
+| 真实 dsh 实例内复跑 | `eval/results/dsh-live/summary.{json,md}`、`compare.md`、`ablation.md` |
 | 实施说明 / 实验报告 | [docs/implementation.md](docs/implementation.md) / [docs/experiment-report.md](docs/experiment-report.md) |
 
 ```bash
@@ -313,7 +315,7 @@ pnpm run eval:all
 pnpm run dsh:integration
 ```
 
-**实验结论摘要**：DLS 全量在 60 个角色扮演长期记忆 case 上取得 100% 事实回忆准确率、100% 状态更新与时态查询准确率，过期误用、错误写入、注入持久化与攻击成功率均为 0%；最佳对照（原生 Graphiti）回忆准确率 80%，但状态更新 0%、错误写入 100%。消融实验显示收益来自写入策略、双时态、作用域隔离、上下文编译与审计纠错的组合，且存在防御纵深（单层消融会被其他层补偿）。完整数据、评测边界与已知偏差见 [实验报告](docs/experiment-report.md)。
+**实验结论摘要**：DLS 全量在 60 个角色扮演长期记忆 case 上取得 100% 事实回忆准确率、100% 状态更新与时态查询准确率，过期误用、错误写入、注入持久化与攻击成功率均为 0%；最佳对照（原生 Graphiti）回忆准确率 80%，但状态更新 0%、错误写入 100%。消融实验显示收益来自写入策略、双时态、作用域隔离、上下文编译与审计纠错的组合，且存在防御纵深（单层消融会被其他层补偿）。真实 dsh 实例内复跑（pid 17183 / profile web）与进程内直跑逐 case 一致（1080 个判定单元 0 差异），consumer 注入路径 7 项探针全过；接入过程中修正了 `inject: ['agent'] → ['agents']` 的服务键缺陷。完整数据、评测边界与已知偏差见 [实验报告](docs/experiment-report.md)。
 
 ## 参考
 

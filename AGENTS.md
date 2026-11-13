@@ -6,7 +6,7 @@
 
 - `dsh-graphiti-dls`：为 DeepSeek Harness（DSH）提供长期记忆与上下文编译能力的插件。
 - 以 Graphiti 作为时态知识图谱后端，通过独立适配层接入 DSH。
-- 当前阶段：P0 最小闭环已落地为可运行工程；对比实验与消融实验已跑通。P1/P2 未实现。
+- 当前阶段：P0 最小闭环已落地为可运行工程；对比实验与消融实验已跑通；已作为 bundle 链接进本机 `web` profile，并在真实 dsh 宿主进程内完成实例内复跑。P1/P2 未实现。
 
 ## 仓库结构
 
@@ -18,10 +18,11 @@
 | `docs/experiment-report.md` | 对比/消融实验结论、边界与复现步骤 |
 | `src/model/`、`src/policy/`、`src/store/` | 记忆模型、受控写入、`GraphitiPort` 与双时态后端 |
 | `src/compiler/`、`src/audit/`、`src/dls.ts` | 检索与上下文编译、审计纠错、系统门面 |
-| `src/dsh/` | Cordis 插件适配层（Service Definition / Provider / Consumer） |
-| `src/eval/` | 评测集、被测系统、指标、运行器、报告与 CLI |
+| `src/dsh/` | Cordis 插件适配层（Service Definition / Provider / Consumer）与 Host 入口 |
+| `src/eval/` | 评测集、被测系统、指标、运行器、报告、CLI 与实例内评测驱动 |
+| `cordis.patch.yml` | bundle patch：插入 `dls-memory` 与 `dls-live-eval` 两个 Host 行 |
 | `datasets/` | 生成的角色扮演长期记忆评测集（一等产物） |
-| `eval/` | 基线配置、patch 层与实验结果（一等产物） |
+| `eval/` | 基线配置、patch 层与实验结果（一等产物；实例内结果在 `eval/results/dsh-live/`） |
 | `scripts/` | 市场目录分析、结果抽查、dsh 集成验证 |
 | `tests/` | `node:test` 单元测试 |
 | `.trae/rules/` | 工具侧规则，只做引用，不维护规范副本 |

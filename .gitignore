@@ -9,6 +9,8 @@ dist/
 .env.*
 !.env.example
 *.log
+# 实例内评测运行记录是实验证据，需要随结果提交
+!eval/results/dsh-live/run.log
 
 # 评测中间产物（原始结果与报告需要提交，作为一等产物）
 /tmp/

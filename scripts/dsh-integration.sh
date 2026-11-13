@@ -3,9 +3,9 @@
 #
 # 只做 `--dump-config`：合成并打印 profile 组合树，不加载插件代码、不启动
 # 需要模型凭据的 app，也不改动 ~/.dsh/profiles 下的任何现有配置。
-# 如需完整启动，先发布/link 本仓库，再执行
-#   dsh plugin --profile <name> add <package>
-# 然后正常 boot；那一步需要模型凭据，不在自动化验证范围内。
+# 完整装载与实例内评测走另一条路径：用 dsh 的 plugin_manager 安装本目录
+# （pnpm link + bundle 选中），宿主进程激活 dls-live-eval 后自动写出
+# eval/results/dsh-live/。本脚本只做无需凭据的配置合成检查。
 set -euo pipefail
 
 DSH_REPO="${DSH_REPO:-/home/cyrene/codes/deepseek-harness}"

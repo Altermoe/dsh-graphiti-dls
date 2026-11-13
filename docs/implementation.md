@@ -36,10 +36,14 @@ agent loop 本身。README「添加模型可见上下文」在 `docs/architectur
 | Service Provider | `src/dsh/plugin.ts` → `DlsMemoryService` → `DlsMemorySystem` | 持有受控写入、双时态图谱、检索、编译、审计 |
 | Consumer | `agent/pre-step` 监听器（消费已领取消息）+ `agent.inject()`（消费编译结果） | 在轮次边界刷新记忆并注入下一次请求 |
 
+> 注册方式：Host 入口（`src/dsh/host.ts`）用 `ctx.provide('dlsMemory', service)`
+> 注册服务，归属当前 fiber；`createDlsPlugin` 里对 `childCtx` 的属性赋值只是
+> 最小契约测试的替身，不代表真实注册路径。
+
 Cordis 习惯（本仓库首次涉及，给出准确含义）：
 
-- **`ctx.inject([...], callback)` 声明依赖**，不是 import：插件声明 `inject: ['agent']`，等服务就绪才启动，
-  加载顺序由依赖表达，而非手动编排。
+- **`ctx.inject([...], callback)` 声明依赖**，不是 import：插件声明 `inject: ['agents']`
+  （AgentRegistry 的真实服务键），等服务就绪才启动，加载顺序由依赖表达，而非手动编排。
 - **`ctx.<key>` 才是服务容器**：插件不直接 import 别的插件，而是声明注入后从 `ctx` 取。
 - **注册是可逆副作用**：`ctx.inject` 回调内的服务与监听器随插件卸载自动撤销，
   不写「手动清理注册表」这种反模式。
@@ -101,18 +105,53 @@ src/
   `GraphitiServiceClient` 只给请求构造与超时。
 - 日志中的敏感数据处理与保留期限。
 - 完整 boot：先 `dsh plugin --profile <name> add <package>` 安装（需发布或 `link` 本仓库），
-  再正常启动；`--dump-config` 只验证配置合成。
+  再正常启动；`--dump-config` 只验证配置合成。本机 `web` profile 已完成这一步，
+  见第六节。
 
-## 六、本地集成验证
+## 六、真实 DSH 实例接入与实例内评测
+
+本仓库现在是一个可安装的 profile bundle：`package.json` 的 `dsh.bundle.patch`
+指向根目录 `cordis.patch.yml`，其中插入两个 Host 行：
+
+| 行 id | 模块 | 作用 |
+|---|---|---|
+| `dls-memory` | `dsh-graphiti-dls/dls-memory` | 注册 `ctx.dlsMemory`，监听 `agent/pre-step` |
+| `dls-live-eval` | `dsh-graphiti-dls/dls-eval` | 在宿主进程内跑对比/消融并写回 `eval/results/dsh-live/` |
+
+安装（本机 web profile）：
 
 ```bash
-pnpm run dsh:integration
+# 方式一：GUI 的 Plugins 面板选择本地目录（等价于 agent 工具的 install_bundle）
+# 方式二：命令行分两步
+dsh plugin --profile web add /home/cyrene/codes/dsh-graphiti-dls
+# 再把 dsh-graphiti-dls 加入 profile 的 dsh.profile.bundles
 ```
 
-默认在 `/home/cyrene/codes/deepseek-harness` 内执行
-`pnpm dsh --profile web --patch eval/dls-plugin.patch.yml --dump-config`，
-只做 profile 组合树合成，不改动 `~/.dsh/profiles` 下任何现有配置、不启动 app。
-结果见 `eval/results/dsh-integration.md`。
+本次实际使用的是 dsh 的 `plugin_manager` 工具（`install_bundle`，target 为
+仓库绝对路径）：它同时完成 pnpm link 与 bundle 选中，并在当前实例内 HMR 激活。
+
+安装后 `dsh-graphiti-dls` 以 `link:` 依赖进入 `~/.dsh/profiles/web`，loader
+从 profile 解析 bundle patch。验证结果：
+
+- `plugin_manager` 的 `list_plugins` 中 `include:dls-memory` 为 `active`；
+- 实例内评测以 `pid=17183`（`dsh web --no-open` 宿主进程）、`profile=web` 运行，
+  `eval/results/dsh-live/summary.json` 记录了宿主 pid、profile、挂载服务与配置；
+- `dls-live-eval` 跑完后已禁用，避免每次启动重复执行；记忆插件保持启用。
+
+### 接入过程中修正的真实缺陷
+
+初版 patch 行写的是 `inject: ['agent']`，安装后两个条目一直 `pending
+(waiting for service: agent)`。回到 dsh 源码核对：AgentRegistry 的服务键是
+`agents`（`packages/core/agent/src/index.ts` 的 `super(ctx, 'agents')`），
+`agent` 并不是服务。改为 `inject: ['agents']` 后条目正常激活。这说明
+`--dump-config` 只能验证配置合成，不能替代真实装载。
+
+### 运行时前提
+
+当前 web profile 用 `node --import tsx/esm apps/cli/src/bin.ts` 从源码启动，
+因此 loader 能直接装载本仓库的 `.ts` 导出；发布或换成预编译 dsh 时需要先
+构建 JS 产物。`--dump-config` 集成检查（`pnpm run dsh:integration`）仍保留，
+用于验证 profile 组合树，结果见 `eval/results/dsh-integration.md`。
 
 ## 七、运行命令
 
@@ -123,13 +162,14 @@ pnpm run test                      # node --import tsx --test tests/*.test.ts
 pnpm run eval:compare              # 对比实验
 pnpm run eval:ablation             # 消融实验
 pnpm run eval:all                  # 两者 + 导出评测集
-pnpm run dsh:integration           # 本地 dsh 配置合成验证
+pnpm run dsh:integration           # 本地 dsh 配置合成验证（不改 profile）
 pnpm run market:catalog            # 重新采集 dshmarket 下载量
 ```
 
 ## 八、版本状态说明
 
-- 本仓库：`0.1.0` 工作区实现，P0 闭环；P1（写入审计队列、派生撤销 UI、调试追踪）与
+- 本仓库：`0.1.0` 工作区实现，P0 闭环；已作为 bundle 链接进本机 web profile，
+  并在真实宿主进程内完成对比/消融复跑。P1（写入审计队列、派生撤销 UI、调试追踪）与
   P2（多 Agent 私有/共享记忆、混合检索、缓存与批处理）未实现。
 - dsh 宿主：本地工作区 `v0.2.2-rc.2`；插件按该版本的事件签名与 profile patch 格式编写。
 - Session 格式：本实现**不触碰**已发布的 Session generation 路径，

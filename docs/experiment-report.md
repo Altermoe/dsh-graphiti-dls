@@ -2,7 +2,8 @@
 
 > 日期：2026-11-13 · 状态：README 的 P0 最小闭环已落地，对比实验与消融实验已跑通。
 > 本文中的文件路径均相对仓库根目录。
-> 原始结果：`eval/results/compare.json|md`、`eval/results/ablation.json|md`。
+> 原始结果：`eval/results/compare.json|md`、`eval/results/ablation.json|md`；
+> 真实 dsh 实例内复跑：`eval/results/dsh-live/`。
 
 ## 一、结论先行
 
@@ -77,7 +78,43 @@
 
 结论：README 中「上下文编译、状态规则与安全策略」三项新增复杂度，在本评测集上都有可测量的独立贡献；只有来源降权的贡献需要组合消融才能显现。
 
-## 五、与 README 假设的对照
+## 五、真实 DSH 实例内复跑
+
+2026-11-13，本仓库作为 bundle 链接进本机 `web` profile，并在正在运行的 dsh
+宿主进程内重跑对比与消融套件。运行元数据写入
+`eval/results/dsh-live/summary.json`。
+
+| 项 | 值 |
+|---|---|
+| 宿主 | `node --import tsx/esm apps/cli/src/bin.ts web --no-open` |
+| pid | 17183（即当前 Web 实例进程） |
+| profile | `web` |
+| 挂载服务 | `ctx.dlsMemory` 存在，配置 `max_input_tokens=6000` / `memory_budget_tokens=1800` |
+| 运行时间 | 2026-11-13T08:00:35Z（本地 16:00） |
+| 产物 | `eval/results/dsh-live/{compare,ablation}.{json,md}`、`summary.{json,md}`、`run.log` |
+
+结果：**与进程内直跑逐 case 一致**。对比组与消融组各比对 540 个
+system × case 的判定字段（答案、召回、状态更新、时态、过期误用、错误写入、
+注入持久化、攻击成功、tokens、写入数、预算合规），**不一致 0 个**；DLS 全量
+指标仍为回忆/状态/时态 100%、过期误用/错误写入/注入持久化/攻击成功 0%，
+平均输入 84 tokens。延迟字段不参与比对（实例内计时受宿主活动影响）。
+
+Consumer 路径探针（独立服务实例，避免把 60 个虚构 case 写进用户记忆）
+验证了真实 waterfall 逻辑：`decision` 原样返回、注入发生、消息 `id` 非空、
+`role=user`、`source.kind=dls-memory`、内容带 `<dls-memory>` 标记、事实已持久化，
+7 项全部通过。
+
+这次接入修复了一个真实缺陷：初版 patch 行写 `inject: ['agent']`，条目一直
+`pending (waiting for service: agent)`；dsh 中 AgentRegistry 的服务键实际是
+`agents`。修正后条目正常激活。说明 `--dump-config` 只能验证配置合成，不能
+替代真实装载。
+
+边界：实例内 DLS 臂由插件服务工厂构造（与挂载服务同源同实现），但使用独立
+状态实例；挂载的 `ctx.dlsMemory` 只做存在性与配置核对。基线仍是
+`src/eval` 中的机制等价适配器，未改为插件直跑。因此本节证明的是**接入正确性
+与结果一致性**，不是新的精度结论。
+
+## 六、与 README 假设的对照
 
 | README 判据 | 本次验证情况 |
 |---|---|
@@ -90,7 +127,7 @@
 | 用户/会话/Agent 隔离 | ⚠️ 部分：用户、项目、会话、场景隔离已实现并测试；Agent 私有/共享记忆属 P2，未实现 |
 | 真实 Graphiti 服务接入 | ⚠️ 契约已实现（`GraphitiHttpAdapter`），但默认评测走零依赖的等价双时态内存后端，未起 Neo4j / graphiti-core 服务 |
 
-## 六、已知偏差与限制（务必阅读）
+## 七、已知偏差与限制（务必阅读）
 
 1. **「答不出反而算对」偏差**：删除与撤销、过期事实两类 case 以「不泄漏」为判定条件，任何返回空答案的系统都会得分。滚动摘要在这些 case 上的高分必须与其 12.5% 的事实召回率合并解读；后续应引入「选择性回答」指标（该答的答对、不该答的拒答）。
 2. **评测隔离了抽取与生成质量**：所有系统面对相同的预标注候选事实流，答案由统一确定性 answerer 从进入上下文的结构化事实投影。因此结论适用于「记忆生命周期 + 上下文编译层」，不等于端到端对话质量。接入真实模型后需重跑回归。
@@ -98,10 +135,10 @@
 4. **攻击成功率是代理指标**：定义为「攻击内容进入模型可见上下文且未被标记为不可信」。README 要求区分「输出未暴露攻击内容」与「攻击确实未影响系统行为」，后者需要端到端工具执行环境，本次未覆盖。
 5. **Token / 延迟 / 成本是估算**：Token 用确定性近似（CJK 1 token/字，其余 4 字符/token），延迟为进程内 `ingest+compile` 耗时（P50/P95 均在 0.2ms 以内），不含网络、图数据库与模型推理；成本按示例单价折算，只用于相对比较。
 6. **`no_source_ranking` 无退化不等于组件无用**：见「防御纵深」；单层消融在多层安全架构中天然会低估贡献。
-7. **本地 dsh 集成只验证到配置合成层**：`pnpm dsh --profile web --patch ... --dump-config` 通过，插件行为由单元测试覆盖；未完整 boot（需要把本仓库 link 进 profile 并配置模型凭据）。详见 `eval/results/dsh-integration.md`。
+7. **真实实例复跑的边界**：已验证 bundle 装载、服务注入、consumer 路径与指标一致性；但 DLS 臂使用独立服务实例，未在实例内跑端到端模型对话（无真实 LLM 抽取/生成），基线也未以插件二进制直跑。当前 web profile 以 tsx 从源码启动，插件直接装载 `.ts`；换成预编译 dsh 时需先构建 JS 产物。
 8. **知识图谱导航未使用**：本地 WSL 的 deepseek-harness 副本没有 `.ua/knowledge-graph.json`，架构结论全部回到 `docs/*.zh.md` 与 `packages/**/src` 源码复核。若后续用图谱导航，需注意三个已知盲区：barrel 再导出不可见（`rdeps` 为空不代表没依赖）、切片外依赖不可见（`client.ts` 的 `@deepseek-ai/dsh-api-*` 边缺失）、`preset/agent-preset/skills/` 下的文档会被误分入专用层。
 
-## 七、复现
+## 八、复现
 
 ```bash
 # 依赖（pnpm 11：构建脚本白名单在 pnpm-workspace.yaml）
@@ -109,7 +146,7 @@ pnpm install
 
 # 静态与行为验证
 pnpm run typecheck
-pnpm run test                # 22 个用例
+pnpm run test                # 31 个用例
 
 # 重新生成评测集、原始结果与报告
 pnpm run eval:compare
@@ -124,8 +161,12 @@ python3 scripts/inspect_results.py compare cross_session_recall
 python3 scripts/market_catalog.py --fetch --downloads \
   --select "dsh-fish-soul,dsh-aiyayi,dsh-cross-memory,@dsh-agentic-roleplay/state"
 
-# 本地 dsh 集成验证（配置合成层）
+# 本地 dsh 集成验证（配置合成层，不改 profile）
 pnpm run dsh:integration
 ```
+
+真实实例复跑不通过 CLI 命令触发：安装 bundle 后，`dls-live-eval` 行在宿主
+进程激活时自动运行一次，结果写入 `eval/results/dsh-live/`；跑完在 profile
+层禁用该行即可。
 
 所有评测产物均为确定性生成，重复执行应得到相同指标（时间戳除外）。
