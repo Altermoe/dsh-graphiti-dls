@@ -10,9 +10,14 @@
 - insert:
     - id: dls-memory
       name: "dsh-graphiti-dls/dls-memory"
-      inject: [agent]
+      inject: [agents]
       config:
-        maxInputTokens: 6000
-        memoryBudgetTokens: 1800
-        recentTurns: 8
-        requireProvenance: true
+        context:
+          max_input_tokens: 6000
+          memory_budget_tokens: 1800
+          recent_turns: 8
+          require_provenance: true
+        identity:
+          user_id: local-user
+          project_id: dsh-graphiti-dls
+        extractExplicit: true
